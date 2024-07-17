@@ -12,7 +12,7 @@ type CtxError struct {
 }
 
 func (e *CtxError) Error() string {
-	return e.issuer.formatMsg(e.msg)
+	return e.issuer.formatMsg("ERROR " + e.msg)
 }
 
 type Context struct {
@@ -25,6 +25,7 @@ func (c *Context) Child(name string) *Context {
 	return &Context{
 		name:   name,
 		parent: c,
+		out:    c.out,
 	}
 }
 
@@ -32,50 +33,54 @@ func (c *Context) Name() string {
 	return c.name
 }
 
-func (l *Context) prefix() string {
-	if l.parent != nil {
-		return l.parent.prefix() + "::" + l.name
+func (c *Context) prefix() string {
+	if c.parent != nil {
+		return c.parent.prefix() + "::" + c.name
 	}
-	return l.name
+	return c.name
 }
 
-func (l *Context) formatMsg(msg string) string {
-	return fmt.Sprintf("[%s] %s", l.prefix(), msg)
+func (c *Context) formatMsg(msg string) string {
+	return fmt.Sprintf("[%s] %s", c.prefix(), msg)
 }
 
-func (l *Context) Println(args ...interface{}) {
-	fmt.Fprintln(l.out, l.formatMsg(fmt.Sprint(args...)))
+func (c *Context) Println(args ...interface{}) {
+	fmt.Fprintln(c.out, c.formatMsg(fmt.Sprint(args...)))
 }
 
-func (l *Context) Printf(format string, args ...interface{}) {
-	fmt.Fprintf(l.out, l.formatMsg(format), args...)
+func (c *Context) Printf(format string, args ...interface{}) {
+	fmt.Fprintf(c.out, c.formatMsg(format), args...)
 }
 
-func (l *Context) Errorf(format string, args ...interface{}) error {
-	return &CtxError{issuer: l, msg: fmt.Sprintf(format, args...)}
+func (c *Context) Writeln(s string) {
+	fmt.Fprintln(c.out, s)
 }
 
-func (l *Context) Error(msg string) error {
-	return &CtxError{issuer: l, msg: msg}
+func (c *Context) Errorf(format string, args ...interface{}) error {
+	return &CtxError{issuer: c, msg: fmt.Sprintf(format, args...)}
 }
 
-func (l *Context) wrap(err error) error {
+func (c *Context) Error(msg string) error {
+	return &CtxError{issuer: c, msg: msg}
+}
+
+func (c *Context) wrap(err error) error {
 	if ce, ok := err.(*CtxError); ok {
 		return ce
 	}
-	return &CtxError{issuer: l, msg: err.Error()}
+	return &CtxError{issuer: c, msg: err.Error()}
 }
 
-func (l *Context) WrapAndTag(err error, msg string) error {
+func (c *Context) WrapAndTag(err error, msg string) error {
 	if msg == "" {
-		return l.wrap(err)
+		return c.wrap(err)
 	}
-	ce := l.wrap(err).(*CtxError)
+	ce := c.wrap(err).(*CtxError)
 	return &CtxError{issuer: ce.issuer, msg: fmt.Sprintf("%s: %s", msg, ce.msg)}
 }
 
-func (l *Context) WrapAndTagf(err error, format string, args ...interface{}) error {
-	return l.WrapAndTag(err, fmt.Sprintf(format, args...))
+func (c *Context) WrapAndTagf(err error, format string, args ...interface{}) error {
+	return c.WrapAndTag(err, fmt.Sprintf(format, args...))
 }
 
 func NewContext(name string, writer io.Writer) *Context {
@@ -92,7 +97,7 @@ type contextExecutionBreak[T any] struct {
 }
 
 type ContextExecution[T any] struct {
-	Ctx *Context
+	*Context
 }
 
 func (c *ContextExecution[T]) Return(r T) {
@@ -111,5 +116,12 @@ func ExecuteWithContext[T any](ctx *Context, f func(*ContextExecution[T]) T) (re
 			panic(r)
 		}
 	}()
-	return f(&ContextExecution[T]{Ctx: ctx})
+	return f(&ContextExecution[T]{Context: ctx})
+}
+
+func ExecuteWithContextGR[T any](ctx *Context, f func(*ContextExecution[T]) T, cb func(T)) {
+	go func() {
+		r := ExecuteWithContext(ctx, f)
+		cb(r)
+	}()
 }
