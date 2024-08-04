@@ -1,6 +1,9 @@
 package glycogen
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 type Result[T any] struct {
 	err error
@@ -46,6 +49,10 @@ func (r Result[T]) UnwrapOrDefault(def T) T {
 		return def
 	}
 	return r.val
+}
+
+func (r Result[T]) UnwrapErrOrNil() error {
+	return r.err
 }
 
 func (r Result[T]) UnwrapOrHandle(f func(error)) T {
@@ -125,4 +132,12 @@ func CEHandler[T any](ctx *ContextExecution[Result[T]], tag string) func(error) 
 	return func(err error) {
 		ctx.Return(Err[T](ctx.WrapAndTag(err, tag)))
 	}
+}
+
+func ConvertType[R any](v any) Result[R] {
+	nv, ok := v.(R)
+	if !ok {
+		return Err[R](fmt.Errorf("failed to convert %T to %T", v, new(R)))
+	}
+	return Ok(nv)
 }

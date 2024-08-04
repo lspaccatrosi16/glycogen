@@ -64,7 +64,7 @@ func (c *Context) Error(msg string) error {
 	return &CtxError{issuer: c, msg: msg}
 }
 
-func (c *Context) wrap(err error) error {
+func (c *Context) wrap(err error) *CtxError {
 	if ce, ok := err.(*CtxError); ok {
 		return ce
 	}
@@ -72,10 +72,13 @@ func (c *Context) wrap(err error) error {
 }
 
 func (c *Context) WrapAndTag(err error, msg string) error {
+	if err == nil {
+		return nil
+	}
 	if msg == "" {
 		return c.wrap(err)
 	}
-	ce := c.wrap(err).(*CtxError)
+	ce := c.wrap(err)
 	return &CtxError{issuer: ce.issuer, msg: fmt.Sprintf("%s: %s", msg, ce.msg)}
 }
 

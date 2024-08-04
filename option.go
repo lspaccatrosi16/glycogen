@@ -53,6 +53,13 @@ func (o Option[T]) UnwrapOrHandle(f func()) T {
 	return o.val
 }
 
+func (o Option[T]) UnwrapOrReturnErr(ctx *ContextExecution[error], msg string) T {
+	if o.none {
+		ctx.Return(ctx.Error(msg))
+	}
+	return o.val
+}
+
 func (o Option[T]) UnwrapBoth() (T, bool) {
 	return o.val, !o.none
 }
